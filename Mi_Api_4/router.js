@@ -38,7 +38,7 @@ router.post('/extraer-json', upload.single('imagen'), async (req, res) => {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     let imageBuffer, mediaType;
     if (req.file) {
@@ -71,7 +71,7 @@ router.post('/extraer-json', upload.single('imagen'), async (req, res) => {
       semantica = { error: 'No se pudo parsear la respuesta de Gemini', raw: cleaned.slice(0, 300) };
     }
 
-    semantica.estructura = { formato, ancho, alto, motor: 'gemini-1.5-flash' };
+    semantica.estructura = { formato, ancho, alto, motor: 'gemini-2.0-flash' };
     res.json(semantica);
 
   } catch (err) {
