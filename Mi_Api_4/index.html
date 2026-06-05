@@ -1,0 +1,371 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>ADN Fotográfico · Extractor JSON</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:monospace;background:#0f0f0f;color:#e5e5e5;min-height:100vh;padding:1.5rem;}
+h1{font-size:14px;font-weight:500;letter-spacing:.14em;color:#666;margin-bottom:1rem;text-transform:uppercase;}
+.app{display:grid;grid-template-rows:auto auto;gap:1rem;}
+.panel-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+.panel{background:#1a1a1a;border:0.5px solid #2e2e2e;border-radius:12px;overflow:hidden;}
+.panel-header{padding:10px 14px;border-bottom:0.5px solid #2e2e2e;font-size:11px;font-weight:500;color:#666;letter-spacing:.08em;display:flex;align-items:center;gap:6px;}
+.panel-body{padding:12px;}
+.drop-zone{border:1px dashed #333;border-radius:8px;height:220px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:all .2s;color:#555;font-size:13px;gap:8px;position:relative;}
+.drop-zone:hover{border-color:#555;background:#1f1f1f;}
+.drop-zone label{position:absolute;inset:0;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;}
+.drop-zone input[type=file]{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;}
+#canvas-wrap{position:relative;width:100%;height:220px;cursor:crosshair;display:none;}
+#main-canvas{display:block;width:100%;height:100%;object-fit:contain;}
+.sel-rect{position:absolute;border:2px solid #4ade80;background:rgba(74,222,128,.1);pointer-events:none;display:none;}
+.json-out{height:234px;overflow-y:auto;font-size:10.5px;line-height:1.55;color:#ccc;white-space:pre-wrap;word-break:break-word;font-family:monospace;}
+.placeholder-msg{color:#444;font-size:12px;line-height:1.7;text-align:center;padding:2rem 1rem;}
+.status-dot{width:7px;height:7px;border-radius:50%;background:#333;display:inline-block;flex-shrink:0;}
+.status-dot.active{background:#22c55e;animation:pulse 1.2s infinite;}
+.status-dot.loading{background:#f59e0b;animation:pulse .6s infinite;}
+.status-dot.error{background:#ef4444;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+.bottom-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+.json-input{width:100%;height:200px;font-family:monospace;font-size:10.5px;line-height:1.55;resize:none;border:none;outline:none;background:transparent;color:#aaa;padding:0;}
+.reconstruct-area{height:200px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+#preview-img{max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;display:none;}
+.hint{font-size:11px;color:#444;text-align:center;padding:1rem;line-height:1.6;}
+.btn{font-size:11px;font-family:monospace;border:0.5px solid #333;border-radius:8px;padding:5px 11px;background:transparent;color:#666;cursor:pointer;transition:all .15s;}
+.btn:hover{background:#222;color:#ccc;}
+.btn:disabled{opacity:.35;cursor:not-allowed;}
+.btn-ai{border-color:#4ade80;color:#4ade80;}
+.btn-ai:hover{background:#14291e;color:#86efac;}
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:#333;border-radius:2px;}
+.api-row{display:flex;align-items:center;gap:8px;margin-bottom:1rem;flex-wrap:wrap;}
+.api-input{flex:1;min-width:200px;font-family:monospace;font-size:11px;background:#111;border:0.5px solid #2e2e2e;border-radius:6px;padding:6px 10px;color:#aaa;outline:none;}
+.api-input:focus{border-color:#4ade80;}
+.api-label{font-size:10px;color:#555;white-space:nowrap;}
+.api-hint{font-size:10px;color:#3a5a3a;margin-top:4px;}
+a.api-link{color:#4ade80;text-decoration:none;}
+a.api-link:hover{text-decoration:underline;}
+</style>
+</head>
+<body>
+
+<h1>⬡ ADN fotográfico · extractor json · Mi API</h1>
+
+<div class="api-row">
+  <span class="api-label">MI API:</span>
+  <input class="api-input" type="text" id="api-url" placeholder="http://localhost:5000/extraer-json" autocomplete="off"/>
+  <button class="btn btn-ai" onclick="saveUrl()">guardar</button>
+  <span id="key-status" style="font-size:10px;color:#4ade80;"></span>
+</div>
+<p class="api-hint">URL de tu servidor. Por defecto: <span style="color:#4ade80">http://localhost:5000/extraer-json</span> — no requiere token.</p>
+
+<br>
+
+<div class="app">
+  <div class="panel-row">
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="status-dot" id="dot-left"></span>
+        <span>fuente · selección de región</span>
+        <span id="sel-info" style="margin-left:auto;font-size:10px;color:#444;"></span>
+      </div>
+      <div class="panel-body">
+        <div class="drop-zone" id="drop-zone">
+          <label for="file-inp">
+            <svg width="28" height="28" fill="none" stroke="#555" stroke-width="1.5" viewBox="0 0 24 24" style="pointer-events:none"><path d="M4 16l4-4 4 4 4-6 4 6"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+            <span style="pointer-events:none">clic aquí o arrastra una fotografía</span>
+            <span style="font-size:11px;color:#444;pointer-events:none">PNG · JPG · WEBP · GIF</span>
+            <input type="file" id="file-inp" accept="image/*">
+          </label>
+        </div>
+        <div id="canvas-wrap">
+          <canvas id="main-canvas"></canvas>
+          <div class="sel-rect" id="sel-rect"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;min-height:24px;flex-wrap:wrap;">
+          <span id="img-meta" style="font-size:10px;color:#444;"></span>
+          <button class="btn" id="btn-clear" style="display:none;margin-left:auto;" onclick="clearAll()">limpiar</button>
+          <button class="btn" id="btn-full" style="display:none;" onclick="extractFull()">extraer todo</button>
+          <button class="btn btn-ai" id="btn-ai" style="display:none;" onclick="runAI()">✦ analizar con mi API</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="status-dot" id="dot-right"></span>
+        <span>ADN · formato json semántico</span>
+        <button class="btn" id="btn-copy" onclick="copyJson()" style="display:none;margin-left:auto;">copiar</button>
+      </div>
+      <div class="panel-body">
+        <div class="json-out" id="json-out">
+          <div class="placeholder-msg">Sube una foto y arrastra sobre la región que quieres analizar.<br><br>Luego pulsa <strong style="color:#4ade80">✦ analizar con mi API</strong> para obtener el JSON semántico completo.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="bottom-row">
+    <div class="panel">
+      <div class="panel-header">
+        <span style="font-size:13px;color:#555;">{ }</span>
+        <span>json compacto · para copiar/pegar</span>
+        <button class="btn" id="btn-dl" style="display:none;margin-left:auto;" onclick="downloadJson()">descargar .json</button>
+      </div>
+      <div class="panel-body">
+        <textarea class="json-input" id="json-input" placeholder="El JSON aparecerá aquí automáticamente." readonly></textarea>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <span class="status-dot" id="dot-preview"></span>
+        <span>resultado · vista previa de la región</span>
+        <span id="preview-info" style="font-size:10px;color:#444;margin-left:auto;"></span>
+      </div>
+      <div class="panel-body">
+        <div class="reconstruct-area">
+          <div class="hint" id="preview-hint">La imagen completa o la región<br>seleccionada aparecerá aquí</div>
+          <img id="preview-img" alt="Vista previa de la región seleccionada">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+var imgEl=null,imgW=0,imgH=0,isDragging=false,startX=0,startY=0;
+var lastJson=null,lastRegion=null;
+var canvasEl=document.getElementById('main-canvas');
+var ctx_main=canvasEl.getContext('2d');
+var selRect=document.getElementById('sel-rect');
+var canvasWrap=document.getElementById('canvas-wrap');
+var jsonOut=document.getElementById('json-out');
+var dz=document.getElementById('drop-zone');
+
+// URL de la API propia
+function saveUrl(){
+  var u=document.getElementById('api-url').value.trim()||'http://localhost:5000/extraer-json';
+  localStorage.setItem('adn_api_url',u);
+  document.getElementById('api-url').value=u;
+  var st=document.getElementById('key-status');
+  st.textContent='guardada';
+  setTimeout(function(){st.textContent='';},2000);
+}
+(function(){
+  var s=localStorage.getItem('adn_api_url');
+  if(s){document.getElementById('api-url').value=s;document.getElementById('key-status').textContent='cargada';}
+  else{document.getElementById('api-url').value='http://localhost:5000/extraer-json';}
+})();
+// Carga de imagen
+document.getElementById('file-inp').addEventListener('change',function(e){
+  if(e.target.files&&e.target.files[0]) loadImage(e.target.files[0]);
+});
+dz.addEventListener('dragover',function(e){e.preventDefault();dz.style.background='#1f1f1f';dz.style.borderColor='#555';});
+dz.addEventListener('dragleave',function(){dz.style.background='';dz.style.borderColor='';});
+dz.addEventListener('drop',function(e){
+  e.preventDefault();dz.style.background='';dz.style.borderColor='';
+  var f=e.dataTransfer.files&&e.dataTransfer.files[0];
+  if(f&&f.type.startsWith('image/')) loadImage(f);
+});
+
+function loadImage(file){
+  var url=URL.createObjectURL(file);
+  imgEl=new Image();
+  imgEl.onload=function(){
+    imgW=imgEl.naturalWidth;imgH=imgEl.naturalHeight;
+    var maxW=canvasWrap.offsetWidth||460,maxH=220;
+    var scale=Math.min(maxW/imgW,maxH/imgH,1);
+    canvasEl.width=Math.round(imgW*scale);
+    canvasEl.height=Math.round(imgH*scale);
+    ctx_main.drawImage(imgEl,0,0,canvasEl.width,canvasEl.height);
+    dz.style.display='none';
+    canvasWrap.style.display='block';
+    document.getElementById('img-meta').textContent=file.name+' · '+imgW+'×'+imgH+' · '+formatBytes(file.size);
+    document.getElementById('btn-clear').style.display='';
+    document.getElementById('btn-full').style.display='';
+    document.getElementById('dot-left').classList.add('active');
+    jsonOut.innerHTML='<div class="placeholder-msg">Arrastra sobre la imagen para seleccionar una región,<br>o pulsa "extraer todo" → luego "✦ analizar con mi API".</div>';
+  };
+  imgEl.onerror=function(){alert('No se pudo cargar la imagen.');};
+  imgEl.src=url;
+}
+
+// Selección de región
+canvasWrap.addEventListener('mousedown',function(e){
+  if(!imgEl)return;
+  isDragging=true;
+  var r=canvasEl.getBoundingClientRect();
+  startX=e.clientX-r.left;startY=e.clientY-r.top;
+  selRect.style.cssText='left:'+startX+'px;top:'+startY+'px;width:0;height:0;display:block;position:absolute;border:2px solid #4ade80;background:rgba(74,222,128,.1);pointer-events:none;';
+});
+canvasWrap.addEventListener('mousemove',function(e){
+  if(!isDragging)return;
+  var r=canvasEl.getBoundingClientRect();
+  var cx=Math.min(Math.max(e.clientX-r.left,0),canvasEl.width);
+  var cy=Math.min(Math.max(e.clientY-r.top,0),canvasEl.height);
+  selRect.style.left=Math.min(startX,cx)+'px';selRect.style.top=Math.min(startY,cy)+'px';
+  selRect.style.width=Math.abs(cx-startX)+'px';selRect.style.height=Math.abs(cy-startY)+'px';
+  document.getElementById('sel-info').textContent=Math.round(Math.abs(cx-startX))+'×'+Math.round(Math.abs(cy-startY))+'px';
+});
+canvasWrap.addEventListener('mouseup',function(e){
+  if(!isDragging||!imgEl)return;
+  isDragging=false;
+  var r=canvasEl.getBoundingClientRect();
+  var cx=Math.min(Math.max(e.clientX-r.left,0),canvasEl.width);
+  var cy=Math.min(Math.max(e.clientY-r.top,0),canvasEl.height);
+  var sx=Math.round(Math.min(startX,cx)),sy=Math.round(Math.min(startY,cy));
+  var sw=Math.round(Math.abs(cx-startX)),sh=Math.round(Math.abs(cy-startY));
+  if(sw<2||sh<2){selRect.style.display='none';return;}
+  lastRegion={sx:sx,sy:sy,sw:sw,sh:sh};
+  document.getElementById('btn-ai').style.display='';
+  extractRegion(sx,sy,sw,sh);
+});
+
+function extractFull(){
+  if(!imgEl)return;
+  selRect.style.display='none';
+  document.getElementById('sel-info').textContent='imagen completa';
+  lastRegion={sx:0,sy:0,sw:canvasEl.width,sh:canvasEl.height};
+  document.getElementById('btn-ai').style.display='';
+  extractRegion(0,0,canvasEl.width,canvasEl.height);
+}
+
+// Extracción local (paleta/brillo)
+function extractRegion(sx,sy,sw,sh){
+  var scaleX=imgW/canvasEl.width,scaleY=imgH/canvasEl.height;
+  var rx=Math.round(sx*scaleX),ry=Math.round(sy*scaleY);
+  var rw=Math.min(Math.round(sw*scaleX),imgW-rx);
+  var rh=Math.min(Math.round(sh*scaleY),imgH-ry);
+  if(rw<1||rh<1)return;
+  var tmp=document.createElement('canvas');
+  tmp.width=rw;tmp.height=rh;
+  var tc=tmp.getContext('2d');
+  tc.drawImage(imgEl,rx,ry,rw,rh,0,0,rw,rh);
+  var id=tc.getImageData(0,0,rw,rh);
+  lastJson={
+    region:{x:rx,y:ry,ancho:rw,alto:rh},
+    brillo:+(getBrightness(id.data,rw,rh)).toFixed(3),
+    saturacion:+(getSaturation(getAvgColor(id.data,rw,rh))).toFixed(3),
+    paleta_colores:extractPalette(id.data,rw,rh).map(function(c){return c.hex;}),
+    analisis_ia:null
+  };
+  renderJson(lastJson);
+  showPreview(tmp.toDataURL('image/png'),rw,rh);
+  document.getElementById('btn-copy').style.display='';
+  document.getElementById('btn-dl').style.display='';
+  document.getElementById('dot-right').classList.add('active');
+}
+
+// ─── Análisis con Mi API ────────────────────────────────────────────────────
+async function runAI(){
+  var apiUrl=(document.getElementById('api-url').value.trim()||'http://localhost:5000/extraer-json');
+  if(!imgEl||!lastRegion){alert('Primero selecciona una región o usa "extraer todo".');return;}
+
+  var btn=document.getElementById('btn-ai');
+  btn.disabled=true;btn.textContent='analizando...';
+  document.getElementById('dot-right').className='status-dot loading';
+
+  // Recortar región seleccionada
+  var scaleX=imgW/canvasEl.width,scaleY=imgH/canvasEl.height;
+  var rx=Math.round(lastRegion.sx*scaleX),ry=Math.round(lastRegion.sy*scaleY);
+  var rw=Math.min(Math.round(lastRegion.sw*scaleX),imgW-rx);
+  var rh=Math.min(Math.round(lastRegion.sh*scaleY),imgH-ry);
+  var tmp=document.createElement('canvas');
+  var MAX=1024,s=Math.min(MAX/rw,MAX/rh,1);
+  tmp.width=Math.round(rw*s);tmp.height=Math.round(rh*s);
+  tmp.getContext('2d').drawImage(imgEl,rx,ry,rw,rh,0,0,tmp.width,tmp.height);
+
+  try{
+    // Convertir canvas a Blob y enviar como multipart/form-data
+    var blob=await new Promise(function(res){tmp.toBlob(function(b){res(b);},'image/jpeg',0.85);});
+    var form=new FormData();
+    form.append('imagen',blob,'region.jpg');
+
+    var res=await fetch(apiUrl,{method:'POST',body:form});
+    if(!res.ok){
+      var er=await res.text();
+      throw new Error('HTTP '+res.status+' — '+er.slice(0,200));
+    }
+    var data=await res.json();
+
+    // Normalizar respuesta: acepta {semantica:{...}} o directamente el objeto
+    var parsed=data.semantica||data;
+    if(data.estructura) parsed.estructura=data.estructura;
+
+    // Enriquecer con datos técnicos locales
+    parsed.tecnico={
+      region:{x:rx,y:ry,ancho:rw,alto:rh},
+      brillo:lastJson?lastJson.brillo:null,
+      saturacion:lastJson?lastJson.saturacion:null,
+      paleta_local:lastJson?lastJson.paleta_colores:[]
+    };
+
+    lastJson=parsed;
+    renderJson(parsed);
+    document.getElementById('dot-right').className='status-dot active';
+  }catch(err){
+    document.getElementById('dot-right').className='status-dot error';
+    var msg=String(err.message);
+    var hint='';
+    if(msg.includes('Failed to fetch')||msg.includes('NetworkError')) hint=' · ¿Está corriendo tu API en '+apiUrl+'?';
+    if(msg.includes('CORS')) hint=' · Habilita CORS en tu API (app.use(cors())).';
+    if(msg.includes('404')) hint=' · Endpoint no encontrado. Verifica la URL.';
+    jsonOut.innerHTML='<div class="placeholder-msg" style="color:#ef4444;">✗ Error: '+msg.replace(/</g,'&lt;')+hint+'</div>';
+  }
+  btn.disabled=false;btn.textContent='✦ analizar con mi API';
+}
+function renderJson(obj){
+  var s=JSON.stringify(obj,null,2);
+  jsonOut.textContent=s;
+  document.getElementById('json-input').value=s;
+}
+function showPreview(src,w,h){
+  var img=document.getElementById('preview-img');
+  img.onload=function(){img.style.display='block';document.getElementById('preview-hint').style.display='none';document.getElementById('dot-preview').classList.add('active');document.getElementById('preview-info').textContent=w+'×'+h+'px';};
+  img.src=src;
+}
+function copyJson(){
+  navigator.clipboard.writeText(jsonOut.textContent).then(function(){
+    var b=document.getElementById('btn-copy');b.textContent='copiado ✓';setTimeout(function(){b.textContent='copiar';},1500);
+  });
+}
+function downloadJson(){
+  var blob=new Blob([jsonOut.textContent],{type:'application/json'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');a.href=url;a.download='adn_'+(Date.now())+'.json';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+}
+function clearAll(){
+  imgEl=null;imgW=0;imgH=0;lastJson=null;lastRegion=null;
+  ctx_main.clearRect(0,0,canvasEl.width,canvasEl.height);
+  canvasWrap.style.display='none';
+  dz.style.display='flex';
+  document.getElementById('img-meta').textContent='';
+  ['btn-clear','btn-full','btn-ai','btn-copy','btn-dl'].forEach(function(id){document.getElementById(id).style.display='none';});
+  document.getElementById('sel-info').textContent='';
+  selRect.style.display='none';
+  jsonOut.innerHTML='<div class="placeholder-msg">Sube una foto y arrastra el mouse<br>sobre la región que quieres analizar.</div>';
+  ['dot-left','dot-right','dot-preview'].forEach(function(id){document.getElementById(id).className='status-dot';});
+  document.getElementById('file-inp').value='';
+  document.getElementById('json-input').value='';
+  document.getElementById('preview-img').style.display='none';
+  document.getElementById('preview-hint').style.display='block';
+  document.getElementById('preview-info').textContent='';
+}
+function extractPalette(data,w,h){
+  var buckets={},total=w*h,step=Math.ceil(total/300);
+  for(var i=0;i<total;i+=step){var idx=i*4;var r=Math.round(data[idx]/32)*32,g=Math.round(data[idx+1]/32)*32,b=Math.round(data[idx+2]/32)*32;var k=r+','+g+','+b;buckets[k]=(buckets[k]||0)+1;}
+  return Object.entries(buckets).sort(function(a,b){return b[1]-a[1];}).slice(0,6).map(function(e){var p=e[0].split(',').map(Number);return{hex:rgbToHex(p[0],p[1],p[2])};});
+}
+function getAvgColor(data,w,h){var r=0,g=0,b=0,c=w*h;for(var i=0;i<c;i++){var idx=i*4;r+=data[idx];g+=data[idx+1];b+=data[idx+2];}return[Math.round(r/c),Math.round(g/c),Math.round(b/c)];}
+function getBrightness(data,w,h){var s=0,c=w*h;for(var i=0;i<c;i++){var idx=i*4;s+=(0.299*data[idx]+0.587*data[idx+1]+0.114*data[idx+2]);}return s/c/255;}
+function getSaturation(rgb){var mx=Math.max(rgb[0],rgb[1],rgb[2])/255,mn=Math.min(rgb[0],rgb[1],rgb[2])/255;return mx===0?0:(mx-mn)/mx;}
+function rgbToHex(r,g,b){return'#'+[r,g,b].map(function(v){return('0'+Math.min(255,v).toString(16)).slice(-2);}).join('');}
+function formatBytes(b){if(b<1024)return b+'B';if(b<1048576)return(b/1024).toFixed(1)+'KB';return(b/1048576).toFixed(1)+'MB';}
+</script>
+</body>
+</html>
