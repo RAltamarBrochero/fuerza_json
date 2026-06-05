@@ -24,6 +24,12 @@ const app = express();
 // Archivos estáticos de la web (extraer_json/index.html)
 app.use(express.static(path.join(__dirname, 'extraer_json')));
 
+// Endpoint para que la web sepa si el servidor ya tiene la API key configurada
+app.get('/api/check-key', (req, res) => {
+  const tieneKey = !!process.env.ANTHROPIC_API_KEY;
+  res.json({ configurada: tieneKey });
+});
+
 // Montar todas las rutas de la API bajo /api
 //   /extraer-json      → /api/extraer-json
 //   /api/seresinmortales → /api/api/seresinmortales  ← evitar doble prefijo
