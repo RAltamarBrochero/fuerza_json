@@ -1,13 +1,13 @@
 {
   "name": "fuerza_json",
   "version": "1.0.0",
-  "description": "Servidor unificado: Mi_Api_4 + extraer_json",
+  "description": "Servidor unificado: Mi_Api_4 (Gemini) + extraer_json",
   "main": "unir.js",
   "scripts": {
     "start": "node unir.js"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.24.0",
+    "@google/generative-ai": "^0.21.0",
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
     "express": "^4.18.2",

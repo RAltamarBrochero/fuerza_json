@@ -1,17 +1,16 @@
 /**
- * router.js — Exporta las rutas de Mi_Api_4 como un Express Router.
- * Usado por unir.js para montar la API bajo /api sin levantar un servidor separado.
- * El index.js original sigue funcionando igual (node index.js en puerto 5000).
+ * router.js — Rutas de Mi_Api_4 usando Google Gemini (gratuito)
+ * Montado por unir.js bajo /api
+ * La API Key se lee desde: variable de entorno GEMINI_API_KEY o header X-Api-Key
  */
 
 const express    = require('express');
 const bodyParser = require('body-parser');
 const multer     = require('multer');
-const Anthropic  = require('@anthropic-ai/sdk');
 const cors       = require('cors');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const router = express.Router();
-
 router.use(cors());
 router.use(bodyParser.json({ limit: '20mb' }));
 
@@ -20,59 +19,26 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }
 });
 
-// ── Prompt semántico (idéntico al de index.js) ─────────────────────────────
-const PROMPT_SEMANTICA = `Analiza esta imagen y devuelve ÚNICAMENTE un JSON válido (sin texto adicional, sin backticks, sin explicaciones) con exactamente esta estructura:
+const PROMPT_SEMANTICA = `Analiza esta imagen y devuelve UNICAMENTE un JSON valido (sin texto adicional, sin backticks, sin explicaciones) con exactamente esta estructura:
+{"sujeto":"","descripcion_semantica":"","tipo_imagen":"foto|arte_digital|ilustracion|captura_pantalla|documento","personas":[{"descripcion":"","genero_aparente":"masculino|femenino|no_determinado","edad_aproximada":"","expresion":"","ropa":"","accion":""}],"objetos_detectados":[],"texto_detectado":null,"escena":{"tipo":"interior|exterior|natural|urbano|estudio","lugar_probable":"","momento_dia":"dia|noche|atardecer|amanecer|no_determinado","clima":"soleado|nublado|lluvioso|no_aplica","ambiente":""},"composicion":{"plano":"primer_plano|plano_medio|plano_general|plano_detalle|panoramico","angulo":"frontal|lateral|cenital|contrapicado|perspectiva"},"colores_dominantes":[],"estado_emocional":"","palabras_clave":[],"prompt_recreacion":""}
+Si no hay personas deja personas:[]. Responde SOLO con el JSON.`;
 
-{
-  "sujeto": "qué o quién es el elemento principal de la imagen",
-  "descripcion_semantica": "descripción visual completa y detallada en 2-3 oraciones",
-  "tipo_imagen": "foto|arte_digital|ilustracion|captura_pantalla|documento",
-  "personas": [
-    {
-      "descripcion": "descripción física",
-      "genero_aparente": "masculino|femenino|no_determinado",
-      "edad_aproximada": "rango en años",
-      "expresion": "descripción de expresión facial",
-      "ropa": "descripción de la ropa",
-      "accion": "qué está haciendo"
-    }
-  ],
-  "objetos_detectados": ["lista de todos los objetos visibles"],
-  "texto_detectado": "cualquier texto visible en la imagen, o null si no hay",
-  "escena": {
-    "tipo": "interior|exterior|natural|urbano|estudio",
-    "lugar_probable": "descripción del lugar",
-    "momento_dia": "dia|noche|atardecer|amanecer|no_determinado",
-    "clima": "soleado|nublado|lluvioso|no_aplica",
-    "ambiente": "descripción del ambiente general"
-  },
-  "composicion": {
-    "plano": "primer_plano|plano_medio|plano_general|plano_detalle|panoramico",
-    "angulo": "frontal|lateral|cenital|contrapicado|perspectiva"
-  },
-  "colores_dominantes": ["color1", "color2", "color3"],
-  "estado_emocional": "descripción del tono emocional o atmósfera de la imagen",
-  "palabras_clave": ["tag1","tag2","tag3","tag4","tag5","tag6","tag7","tag8"],
-  "prompt_recreacion": "prompt detallado en inglés para recrear esta imagen con IA generativa"
-}
-Si no hay personas deja personas:[]. Responde SOLO con el JSON, nada más.`;
-
-// ── Rutas ──────────────────────────────────────────────────────────────────
-
-// POST /api/seresinmortales
 router.post('/api/seresinmortales', (req, res) => {
   res.status(200).json({ message: 'Endpoint activo.' });
 });
 
-// POST /api/extraer-json
 router.post('/extraer-json', upload.single('imagen'), async (req, res) => {
   try {
-    const apiKey = req.headers['x-api-key'] || process.env.ANTHROPIC_API_KEY;
+    const apiKey = req.headers['x-api-key']
+                || process.env.GEMINI_API_KEY
+                || process.env.GOOGLE_API_KEY;
+
     if (!apiKey) {
-      return res.status(401).json({ error: 'Falta la Anthropic API Key. Envíala en el header X-Api-Key.' });
+      return res.status(401).json({ error: 'Falta la Gemini API Key. Configura GEMINI_API_KEY en el sistema o ingrésala en la web.' });
     }
 
-    const anthropic = new Anthropic({ apiKey });
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     let imageBuffer, mediaType;
     if (req.file) {
@@ -83,35 +49,29 @@ router.post('/extraer-json', upload.single('imagen'), async (req, res) => {
       imageBuffer = Buffer.from(raw, 'base64');
       mediaType   = req.body.mimeType || 'image/jpeg';
     } else {
-      return res.status(400).json({ error: 'Envía una imagen como multipart (campo "imagen") o como base64.' });
+      return res.status(400).json({ error: 'Envia una imagen como multipart o base64.' });
     }
 
     const base64  = imageBuffer.toString('base64');
     const formato = mediaType.split('/')[1] || 'jpeg';
     const { ancho, alto } = getImageDimensions(imageBuffer, formato);
 
-    const response = await anthropic.messages.create({
-      model: 'claude-opus-4-6',
-      max_tokens: 1500,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-          { type: 'text', text: PROMPT_SEMANTICA }
-        ]
-      }]
-    });
+    const result = await model.generateContent([
+      PROMPT_SEMANTICA,
+      { inlineData: { mimeType: mediaType, data: base64 } }
+    ]);
+
+    const rawText = result.response.text().trim();
+    const cleaned = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
 
     let semantica;
     try {
-      const rawText = response.content[0].text.trim();
-      const cleaned = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
       semantica = JSON.parse(cleaned);
     } catch {
-      semantica = { error: 'No se pudo parsear la respuesta de Claude' };
+      semantica = { error: 'No se pudo parsear la respuesta de Gemini', raw: cleaned.slice(0, 300) };
     }
 
-    semantica.estructura = { formato, ancho, alto };
+    semantica.estructura = { formato, ancho, alto, motor: 'gemini-1.5-flash' };
     res.json(semantica);
 
   } catch (err) {
@@ -120,7 +80,6 @@ router.post('/extraer-json', upload.single('imagen'), async (req, res) => {
   }
 });
 
-// ── Helpers ────────────────────────────────────────────────────────────────
 function getImageDimensions(buffer, formato) {
   try {
     if (formato === 'png') {
