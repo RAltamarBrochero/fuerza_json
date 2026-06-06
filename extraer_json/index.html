@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>ADN Fotográfico · Extractor JSON</title>
+<title>ADN Fotográfico · Extractor JSON · YOLOv8n Local</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:monospace;background:#0f0f0f;color:#e5e5e5;min-height:100vh;padding:1.5rem;}
@@ -37,6 +37,8 @@ h1{font-size:14px;font-weight:500;letter-spacing:.14em;color:#666;margin-bottom:
 .btn:disabled{opacity:.35;cursor:not-allowed;}
 .btn-ai{border-color:#4ade80;color:#4ade80;}
 .btn-ai:hover{background:#14291e;color:#86efac;}
+.btn-reconstruct{border-color:#60a5fa;color:#60a5fa;}
+.btn-reconstruct:hover{background:#0c1a2e;color:#93c5fd;}
 ::-webkit-scrollbar{width:4px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:#333;border-radius:2px;}
@@ -47,29 +49,35 @@ h1{font-size:14px;font-weight:500;letter-spacing:.14em;color:#666;margin-bottom:
 .cfg-input{flex:1;min-width:200px;font-family:monospace;font-size:11px;background:#0a0a0a;border:0.5px solid #2e2e2e;border-radius:6px;padding:6px 10px;color:#aaa;outline:none;}
 .cfg-input:focus{border-color:#4ade80;}
 .cfg-hint{font-size:10px;color:#3a5a3a;margin-top:2px;}
-a.cfg-link{color:#4ade80;text-decoration:none;}
-a.cfg-link:hover{text-decoration:underline;}
+.motor-badge{font-size:10px;padding:3px 8px;background:#14291e;border:0.5px solid #22c55e;border-radius:6px;color:#4ade80;white-space:nowrap;}
+.server-status{font-size:10px;color:#555;margin-left:auto;display:flex;align-items:center;gap:5px;}
+.server-dot{width:6px;height:6px;border-radius:50%;background:#555;display:inline-block;}
+.server-dot.ok{background:#22c55e;}
+.server-dot.err{background:#ef4444;}
 </style>
 </head>
 <body>
 
-<h1>⬡ ADN fotográfico · extractor json · Mi API + Claude</h1>
+<h1>⬡ ADN fotográfico · extractor json · <span style="color:#4ade80">YOLOv8n local</span></h1>
 
 <div class="config-box">
   <div class="config-row">
-    <span class="cfg-label">ANTHROPIC KEY:</span>
-    <input class="cfg-input" type="password" id="api-key" placeholder="opcional — ya configurada en el servidor" autocomplete="off"/>
-    <button class="btn btn-ai" onclick="saveConfig()">guardar</button>
-    <span id="key-status" style="font-size:10px;color:#4ade80;"></span>
-  </div>
-  <div class="config-row">
     <span class="cfg-label">URL DE MI API:</span>
     <input class="cfg-input" type="text" id="api-url" placeholder="http://localhost:3000/api/extraer-json" autocomplete="off"/>
+    <button class="btn btn-ai" onclick="saveConfig()">guardar</button>
+    <span class="motor-badge">⚙ YOLOv8n · 100% local</span>
   </div>
-  <p class="cfg-hint">
-    Si el servidor ya tiene la key en el PATH de Windows, este campo es <strong style="color:#4ade80">opcional</strong>. 
-    Key gratis en <a class="cfg-link" href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a>.
-  </p>
+  <div class="config-row">
+    <span style="font-size:10px;color:#3a3a3a;">
+      Sin API Key · Sin costos · Sin internet.
+      Asegúrate de que <strong style="color:#4ade80">yolo_server.py</strong> esté corriendo en Python
+      y <strong style="color:#4ade80">Mi_Api_4/index.js</strong> en Node antes de analizar.
+    </span>
+    <span class="server-status" id="server-status">
+      <span class="server-dot" id="server-dot"></span>
+      <span id="server-text">verificando…</span>
+    </span>
+  </div>
 </div>
 
 <div class="app">
@@ -98,7 +106,7 @@ a.cfg-link:hover{text-decoration:underline;}
           <span id="img-meta" style="font-size:10px;color:#444;"></span>
           <button class="btn" id="btn-clear" style="display:none;margin-left:auto;" onclick="clearAll()">limpiar</button>
           <button class="btn" id="btn-full" style="display:none;" onclick="extractFull()">extraer todo</button>
-          <button class="btn btn-ai" id="btn-ai" style="display:none;" onclick="runAI()">✦ analizar con Claude</button>
+          <button class="btn btn-ai" id="btn-ai" style="display:none;" onclick="runAI()">✦ analizar con YOLO</button>
         </div>
       </div>
     </div>
@@ -111,7 +119,7 @@ a.cfg-link:hover{text-decoration:underline;}
       </div>
       <div class="panel-body">
         <div class="json-out" id="json-out">
-          <div class="placeholder-msg">Sube una foto y arrastra sobre la región que quieres analizar.<br><br>Luego pulsa <strong style="color:#4ade80">✦ analizar con Claude</strong> para obtener el JSON semántico completo.</div>
+          <div class="placeholder-msg">Sube una foto y arrastra sobre la región que quieres analizar.<br><br>Luego pulsa <strong style="color:#4ade80">✦ analizar con YOLO</strong> para obtener el JSON semántico completo.</div>
         </div>
       </div>
     </div>
@@ -123,22 +131,23 @@ a.cfg-link:hover{text-decoration:underline;}
       <div class="panel-header">
         <span style="font-size:13px;color:#555;">{ }</span>
         <span>json compacto · para copiar/pegar</span>
-        <button class="btn" id="btn-dl" style="display:none;margin-left:auto;" onclick="downloadJson()">descargar .json</button>
+        <button class="btn btn-reconstruct" id="btn-reconstruct" style="display:none;" onclick="reconstructFromJson()">↺ reconstruir</button>
+        <button class="btn" id="btn-dl" style="display:none;margin-left:4px;" onclick="downloadJson()">descargar .json</button>
       </div>
       <div class="panel-body">
-        <textarea class="json-input" id="json-input" placeholder="El JSON aparecerá aquí automáticamente." readonly></textarea>
+        <textarea class="json-input" id="json-input" placeholder="El JSON aparecerá aquí automáticamente. También puedes pegar un JSON y pulsar ↺ reconstruir."></textarea>
       </div>
     </div>
     <div class="panel">
       <div class="panel-header">
         <span class="status-dot" id="dot-preview"></span>
-        <span>resultado · vista previa de la región</span>
+        <span>resultado · vista previa / reconstrucción</span>
         <span id="preview-info" style="font-size:10px;color:#444;margin-left:auto;"></span>
       </div>
       <div class="panel-body">
         <div class="reconstruct-area">
-          <div class="hint" id="preview-hint">La imagen completa o la región<br>seleccionada aparecerá aquí</div>
-          <img id="preview-img" alt="Vista previa de la región seleccionada">
+          <div class="hint" id="preview-hint">La imagen o la miniatura reconstruida<br>a partir del JSON aparecerá aquí</div>
+          <img id="preview-img" alt="Vista previa">
         </div>
       </div>
     </div>
@@ -155,33 +164,56 @@ var canvasWrap=document.getElementById('canvas-wrap');
 var jsonOut=document.getElementById('json-out');
 var dz=document.getElementById('drop-zone');
 
-// Guardar configuración
+// ── Configuración ────────────────────────────────────────────────────────────
 function saveConfig(){
-  var k=document.getElementById('api-key').value.trim();
   var u=document.getElementById('api-url').value.trim()||'http://localhost:3000/api/extraer-json';
-  if(k) localStorage.setItem('adn_claude_key',k);
   localStorage.setItem('adn_api_url',u);
   document.getElementById('api-url').value=u;
-  var st=document.getElementById('key-status');
-  st.textContent='✓ guardado';
-  setTimeout(function(){st.textContent='';},2000);
+  checkServer();
 }
+
 (function(){
-  var k=localStorage.getItem('adn_claude_key');
   var u=localStorage.getItem('adn_api_url');
-  if(k){document.getElementById('api-key').value=k;document.getElementById('key-status').textContent='✓ cargada';}
   document.getElementById('api-url').value=u||'http://localhost:3000/api/extraer-json';
-  // Verificar si el servidor ya tiene la key en el PATH
-  fetch('/api/check-key').then(function(r){return r.json();}).then(function(d){
-    var st=document.getElementById('key-status');
-    if(d.configurada && !k){
-      st.textContent='✓ key del servidor activa';
-      st.style.color='#4ade80';
-    }
-  }).catch(function(){});
+  checkServer();
 })();
 
-// Carga de imagen
+function getApiUrl(){
+  return document.getElementById('api-url').value.trim()||'http://localhost:3000/api/extraer-json';
+}
+
+function getBaseUrl(){
+  var u=getApiUrl();
+  // Obtener la raíz del servidor Node
+  try{
+    var parsed=new URL(u);
+    return parsed.origin;
+  }catch(e){ return 'http://localhost:3000'; }
+}
+
+function checkServer(){
+  var dot=document.getElementById('server-dot');
+  var txt=document.getElementById('server-text');
+  dot.className='server-dot';
+  txt.textContent='verificando…';
+  fetch(getBaseUrl()+'/api/check-key')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(d.yolo_server_activo){
+        dot.className='server-dot ok';
+        txt.textContent='YOLOv8n activo ✓';
+      } else {
+        dot.className='server-dot err';
+        txt.textContent='yolo_server.py no responde';
+      }
+    })
+    .catch(function(){
+      dot.className='server-dot err';
+      txt.textContent='Mi_Api_4 no responde';
+    });
+}
+
+// ── Carga de imagen ───────────────────────────────────────────────────────────
 document.getElementById('file-inp').addEventListener('change',function(e){
   if(e.target.files&&e.target.files[0]) loadImage(e.target.files[0]);
 });
@@ -209,13 +241,13 @@ function loadImage(file){
     document.getElementById('btn-clear').style.display='';
     document.getElementById('btn-full').style.display='';
     document.getElementById('dot-left').classList.add('active');
-    jsonOut.innerHTML='<div class="placeholder-msg">Arrastra sobre la imagen para seleccionar una región,<br>o pulsa "extraer todo" → luego "✦ analizar con Claude".</div>';
+    jsonOut.innerHTML='<div class="placeholder-msg">Arrastra sobre la imagen para seleccionar una región,<br>o pulsa "extraer todo" → luego "✦ analizar con YOLO".</div>';
   };
   imgEl.onerror=function(){alert('No se pudo cargar la imagen.');};
   imgEl.src=url;
 }
 
-// Selección de región
+// ── Selección de región ───────────────────────────────────────────────────────
 canvasWrap.addEventListener('mousedown',function(e){
   if(!imgEl)return;
   isDragging=true;
@@ -255,7 +287,7 @@ function extractFull(){
   extractRegion(0,0,canvasEl.width,canvasEl.height);
 }
 
-// Extracción local (paleta/brillo)
+// ── Extracción local (paleta/brillo) ─────────────────────────────────────────
 function extractRegion(sx,sy,sw,sh){
   var scaleX=imgW/canvasEl.width,scaleY=imgH/canvasEl.height;
   var rx=Math.round(sx*scaleX),ry=Math.round(sy*scaleY);
@@ -281,15 +313,13 @@ function extractRegion(sx,sy,sw,sh){
   document.getElementById('dot-right').classList.add('active');
 }
 
-// ─── Análisis con Mi API + Claude ─────────────────────────────────────────────
+// ── Análisis con YOLOv8n (via Mi_Api_4) ──────────────────────────────────────
 async function runAI(){
-  var apiKey=document.getElementById('api-key').value.trim();
-  var apiUrl=document.getElementById('api-url').value.trim()||'http://localhost:3000/api/extraer-json';
-
+  var apiUrl=getApiUrl();
   if(!imgEl||!lastRegion){alert('Primero selecciona una región o usa "extraer todo".');return;}
 
   var btn=document.getElementById('btn-ai');
-  btn.disabled=true;btn.textContent='analizando...';
+  btn.disabled=true;btn.textContent='analizando con YOLO…';
   document.getElementById('dot-right').className='status-dot loading';
 
   // Recortar región
@@ -303,16 +333,12 @@ async function runAI(){
   tmp.getContext('2d').drawImage(imgEl,rx,ry,rw,rh,0,0,tmp.width,tmp.height);
 
   try{
-    // Enviar imagen como multipart con la key en el header
-    var blob=await new Promise(function(res){tmp.toBlob(function(b){res(b);},'image/jpeg',0.85);});
+    var blob=await new Promise(function(res){tmp.toBlob(function(b){res(b);},'image/jpeg',0.90);});
     var form=new FormData();
     form.append('imagen',blob,'region.jpg');
 
-    var headers={};
-    if(apiKey) headers['X-Api-Key']=apiKey;
     var res=await fetch(apiUrl,{
       method:'POST',
-      headers:headers,
       body:form
     });
 
@@ -333,65 +359,179 @@ async function runAI(){
     lastJson=parsed;
     renderJson(parsed);
     document.getElementById('dot-right').className='status-dot active';
+    document.getElementById('btn-reconstruct').style.display='';
+
+    // Si el JSON tiene miniatura, mostrarla automáticamente
+    if(parsed.reconstruccion&&parsed.reconstruccion.thumbnail_base64){
+      showPreview('data:image/png;base64,'+parsed.reconstruccion.thumbnail_base64,null,null,'miniatura YOLO');
+    }
+
   }catch(err){
     document.getElementById('dot-right').className='status-dot error';
     var msg=String(err.message);
     var hint='';
-    if(msg.includes('Failed to fetch')||msg.includes('NetworkError')) hint=' · ¿Está corriendo tu API en '+apiUrl+'?';
-    if(msg.includes('CORS')) hint=' · Habilita CORS en tu API (app.use(cors())).';
-    if(msg.includes('401')) hint=' · API Key incorrecta o no enviada.';
+    if(msg.includes('Failed to fetch')||msg.includes('NetworkError'))
+      hint=' · ¿Está corriendo Mi_Api_4 en '+apiUrl+'?';
+    if(msg.includes('503'))
+      hint=' · Mi_Api_4 no pudo contactar a yolo_server.py. ¿Está corriendo?';
     jsonOut.innerHTML='<div class="placeholder-msg" style="color:#ef4444;">✗ Error: '+msg.replace(/</g,'&lt;')+hint+'</div>';
   }
-  btn.disabled=false;btn.textContent='✦ analizar con Claude';
+  btn.disabled=false;btn.textContent='✦ analizar con YOLO';
 }
 
+// ── Reconstrucción desde JSON ─────────────────────────────────────────────────
+function reconstructFromJson(){
+  var raw=document.getElementById('json-input').value.trim();
+  if(!raw){alert('No hay JSON para reconstruir.');return;}
+  var data;
+  try{ data=JSON.parse(raw); }
+  catch(e){ alert('JSON inválido: '+e.message); return; }
+
+  if(data.reconstruccion){
+    var r=data.reconstruccion;
+    // Opción 1: miniatura base64
+    if(r.thumbnail_base64){
+      showPreview('data:image/png;base64,'+r.thumbnail_base64,null,null,'miniatura reconstruida');
+      return;
+    }
+    // Opción 2: matriz de píxeles
+    if(r.matriz_pixeles&&r.matriz_pixeles.datos){
+      var matrix=r.matriz_pixeles;
+      var canvas=document.createElement('canvas');
+      canvas.width=matrix.columnas;
+      canvas.height=matrix.filas;
+      var ctx=canvas.getContext('2d');
+      var imgData=ctx.createImageData(matrix.columnas,matrix.filas);
+      for(var row=0;row<matrix.filas;row++){
+        for(var col=0;col<matrix.columnas;col++){
+          var px=matrix.datos[row][col];
+          var idx=(row*matrix.columnas+col)*4;
+          imgData.data[idx]=px[0];
+          imgData.data[idx+1]=px[1];
+          imgData.data[idx+2]=px[2];
+          imgData.data[idx+3]=255;
+        }
+      }
+      ctx.putImageData(imgData,0,0);
+      showPreview(canvas.toDataURL(),matrix.columnas*matrix.paso_muestreo,matrix.filas*matrix.paso_muestreo,'reconstruida desde matriz');
+      return;
+    }
+  }
+  // Fallback: mostrar paleta de colores
+  if(data.reconstruccion&&data.reconstruccion.paleta_completa){
+    var palette=data.reconstruccion.paleta_completa;
+    var canv=document.createElement('canvas');
+    canv.width=palette.length*40;canv.height=40;
+    var ctx2=canv.getContext('2d');
+    palette.forEach(function(c,i){
+      ctx2.fillStyle=c.hex;
+      ctx2.fillRect(i*40,0,40,40);
+    });
+    showPreview(canv.toDataURL(),null,null,'paleta de colores');
+    return;
+  }
+  alert('El JSON no contiene datos suficientes para reconstruir una imagen.');
+}
+
+// ── Render y utilidades ───────────────────────────────────────────────────────
 function renderJson(obj){
-  var s=JSON.stringify(obj,null,2);
-  jsonOut.textContent=s;
-  document.getElementById('json-input').value=s;
+  jsonOut.innerHTML='<span style="color:#4ade80">'+JSON.stringify(obj,null,2).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</span>';
+  document.getElementById('json-input').value=JSON.stringify(obj,null,2);
 }
-function showPreview(src,w,h){
+
+function showPreview(src,w,h,label){
   var img=document.getElementById('preview-img');
-  img.onload=function(){img.style.display='block';document.getElementById('preview-hint').style.display='none';document.getElementById('dot-preview').classList.add('active');document.getElementById('preview-info').textContent=w+'×'+h+'px';};
+  var hint=document.getElementById('preview-hint');
   img.src=src;
+  img.style.display='block';
+  hint.style.display='none';
+  var info='';
+  if(w&&h) info=w+'×'+h+'px · ';
+  if(label) info+=label;
+  document.getElementById('preview-info').textContent=info;
+  document.getElementById('dot-preview').className='status-dot active';
 }
+
 function copyJson(){
-  navigator.clipboard.writeText(jsonOut.textContent).then(function(){
-    var b=document.getElementById('btn-copy');b.textContent='copiado ✓';setTimeout(function(){b.textContent='copiar';},1500);
+  var t=document.getElementById('json-input').value;
+  if(!t){alert('No hay JSON.');return;}
+  navigator.clipboard.writeText(t).then(function(){
+    var b=document.getElementById('btn-copy');
+    b.textContent='copiado ✓';
+    setTimeout(function(){b.textContent='copiar';},1800);
   });
 }
+
 function downloadJson(){
-  var blob=new Blob([jsonOut.textContent],{type:'application/json'});
-  var url=URL.createObjectURL(blob);
-  var a=document.createElement('a');a.href=url;a.download='adn_'+(Date.now())+'.json';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+  if(!lastJson){alert('No hay JSON.');return;}
+  var blob=new Blob([JSON.stringify(lastJson,null,2)],{type:'application/json'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='adn_fotografico_'+Date.now()+'.json';
+  a.click();
 }
+
 function clearAll(){
-  imgEl=null;imgW=0;imgH=0;lastJson=null;lastRegion=null;
+  imgEl=null;lastJson=null;lastRegion=null;
   ctx_main.clearRect(0,0,canvasEl.width,canvasEl.height);
+  dz.style.display='';
   canvasWrap.style.display='none';
-  dz.style.display='flex';
-  document.getElementById('img-meta').textContent='';
-  ['btn-clear','btn-full','btn-ai','btn-copy','btn-dl'].forEach(function(id){document.getElementById(id).style.display='none';});
-  document.getElementById('sel-info').textContent='';
   selRect.style.display='none';
-  jsonOut.innerHTML='<div class="placeholder-msg">Sube una foto y arrastra el mouse<br>sobre la región que quieres analizar.</div>';
-  ['dot-left','dot-right','dot-preview'].forEach(function(id){document.getElementById(id).className='status-dot';});
-  document.getElementById('file-inp').value='';
-  document.getElementById('json-input').value='';
+  document.getElementById('img-meta').textContent='';
+  document.getElementById('sel-info').textContent='';
+  document.getElementById('btn-clear').style.display='none';
+  document.getElementById('btn-full').style.display='none';
+  document.getElementById('btn-ai').style.display='none';
+  document.getElementById('btn-copy').style.display='none';
+  document.getElementById('btn-dl').style.display='none';
+  document.getElementById('btn-reconstruct').style.display='none';
   document.getElementById('preview-img').style.display='none';
-  document.getElementById('preview-hint').style.display='block';
-  document.getElementById('preview-info').textContent='';
+  document.getElementById('preview-hint').style.display='';
+  document.getElementById('json-input').value='';
+  jsonOut.innerHTML='<div class="placeholder-msg">Sube una foto y arrastra sobre la región que quieres analizar.</div>';
+  ['dot-left','dot-right','dot-preview'].forEach(function(id){
+    document.getElementById(id).className='status-dot';
+  });
 }
-function extractPalette(data,w,h){
-  var buckets={},total=w*h,step=Math.ceil(total/300);
-  for(var i=0;i<total;i+=step){var idx=i*4;var r=Math.round(data[idx]/32)*32,g=Math.round(data[idx+1]/32)*32,b=Math.round(data[idx+2]/32)*32;var k=r+','+g+','+b;buckets[k]=(buckets[k]||0)+1;}
-  return Object.entries(buckets).sort(function(a,b){return b[1]-a[1];}).slice(0,6).map(function(e){var p=e[0].split(',').map(Number);return{hex:rgbToHex(p[0],p[1],p[2])};});
+
+// ── Funciones de análisis local (paleta, brillo, etc.) ───────────────────────
+function getBrightness(data){
+  var sum=0,count=0;
+  for(var i=0;i<data.length;i+=16){sum+=(data[i]*0.299+data[i+1]*0.587+data[i+2]*0.114);count++;}
+  return count?sum/count/255:0;
 }
-function getAvgColor(data,w,h){var r=0,g=0,b=0,c=w*h;for(var i=0;i<c;i++){var idx=i*4;r+=data[idx];g+=data[idx+1];b+=data[idx+2];}return[Math.round(r/c),Math.round(g/c),Math.round(b/c)];}
-function getBrightness(data,w,h){var s=0,c=w*h;for(var i=0;i<c;i++){var idx=i*4;s+=(0.299*data[idx]+0.587*data[idx+1]+0.114*data[idx+2]);}return s/c/255;}
-function getSaturation(rgb){var mx=Math.max(rgb[0],rgb[1],rgb[2])/255,mn=Math.min(rgb[0],rgb[1],rgb[2])/255;return mx===0?0:(mx-mn)/mx;}
-function rgbToHex(r,g,b){return'#'+[r,g,b].map(function(v){return('0'+Math.min(255,v).toString(16)).slice(-2);}).join('');}
-function formatBytes(b){if(b<1024)return b+'B';if(b<1048576)return(b/1024).toFixed(1)+'KB';return(b/1048576).toFixed(1)+'MB';}
+function getAvgColor(data){
+  var r=0,g=0,b=0,n=0;
+  for(var i=0;i<data.length;i+=16){r+=data[i];g+=data[i+1];b+=data[i+2];n++;}
+  return n?[r/n,g/n,b/n]:[0,0,0];
+}
+function getSaturation(rgb){
+  var r=rgb[0]/255,g=rgb[1]/255,b2=rgb[2]/255;
+  var max=Math.max(r,g,b2),min=Math.min(r,g,b2);
+  return max===0?0:(max-min)/max;
+}
+function extractPalette(data,w,h,n){
+  n=n||6;
+  var buckets={};
+  for(var i=0;i<data.length;i+=32){
+    var r=Math.round(data[i]/32)*32,g=Math.round(data[i+1]/32)*32,b2=Math.round(data[i+2]/32)*32;
+    var k=r+','+g+','+b2;
+    buckets[k]=(buckets[k]||0)+1;
+  }
+  var sorted=Object.entries(buckets).sort(function(a,b2){return b2[1]-a[1];}).slice(0,n);
+  return sorted.map(function(e){
+    var rgb=e[0].split(',').map(Number);
+    return {hex:'#'+rgb.map(function(x){return x.toString(16).padStart(2,'0');}).join(''),rgb:rgb};
+  });
+}
+function formatBytes(b){
+  if(b<1024)return b+'B';
+  if(b<1048576)return (b/1024).toFixed(1)+'KB';
+  return (b/1048576).toFixed(1)+'MB';
+}
+
+// Verificar servidor cada 30s
+setInterval(checkServer, 30000);
 </script>
 </body>
 </html>
